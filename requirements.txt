@@ -1,0 +1,15 @@
+langchain-google-genai
+langchain-community
+langchain
+langchain-chroma
+chromadb
+streamlit
+pypdf
+python-docx
+pillow
+python-dotenv
+tiktoken
+google-generativeai
+SpeechRecognition
+audio-recorder-streamlit
+langdetect
