@@ -41,11 +41,20 @@ class VectorStore:
                 google_api_key=api_key
             )
 
-            # Create persist directory
-            self.persist_directory = "./chroma_db"
-            if not os.path.exists(self.persist_directory):
-                logger.info(f"Creating ChromaDB directory: {self.persist_directory}")
-                os.makedirs(self.persist_directory, exist_ok=True)
+            # Detect if running on Streamlit Cloud (read-only filesystem)
+            # Check for Streamlit Cloud environment
+            is_streamlit_cloud = os.getenv('STREAMLIT_SHARING_MODE') or os.path.exists('/mount/src')
+
+            if is_streamlit_cloud:
+                # Use in-memory storage for Streamlit Cloud
+                logger.info("Detected Streamlit Cloud - using in-memory ChromaDB")
+                self.persist_directory = None
+            else:
+                # Use persistent storage for local deployment
+                self.persist_directory = "./chroma_db"
+                if not os.path.exists(self.persist_directory):
+                    logger.info(f"Creating ChromaDB directory: {self.persist_directory}")
+                    os.makedirs(self.persist_directory, exist_ok=True)
 
             # Initialize ChromaDB client
             self.vectorstore = None
@@ -79,12 +88,22 @@ class VectorStore:
             if self.vectorstore is None:
                 # Create new vectorstore
                 logger.info(f"Creating new vectorstore collection: {self.collection_name}")
-                self.vectorstore = Chroma.from_documents(
-                    documents=valid_documents,
-                    embedding=self.embeddings,
-                    collection_name=self.collection_name,
-                    persist_directory=self.persist_directory
-                )
+
+                if self.persist_directory:
+                    # Persistent storage (local)
+                    self.vectorstore = Chroma.from_documents(
+                        documents=valid_documents,
+                        embedding=self.embeddings,
+                        collection_name=self.collection_name,
+                        persist_directory=self.persist_directory
+                    )
+                else:
+                    # In-memory storage (Streamlit Cloud)
+                    self.vectorstore = Chroma.from_documents(
+                        documents=valid_documents,
+                        embedding=self.embeddings,
+                        collection_name=self.collection_name
+                    )
                 logger.info("✅ Vectorstore created successfully")
             else:
                 # Add documents to existing vectorstore
@@ -103,13 +122,21 @@ class VectorStore:
             True if loaded successfully, False otherwise
         """
         try:
-            self.vectorstore = Chroma(
-                collection_name=self.collection_name,
-                embedding_function=self.embeddings,
-                persist_directory=self.persist_directory
-            )
-            return True
+            if self.persist_directory:
+                # Load from persistent storage (local)
+                self.vectorstore = Chroma(
+                    collection_name=self.collection_name,
+                    embedding_function=self.embeddings,
+                    persist_directory=self.persist_directory
+                )
+                return True
+            else:
+                # In-memory storage - cannot reload (Streamlit Cloud)
+                # Vectorstore only exists in current session
+                logger.debug("In-memory vectorstore - cannot reload")
+                return False
         except Exception as e:
+            logger.error(f"Error loading vectorstore: {str(e)}")
             return False
 
     def search_similar(self, query: str, k: int = 4) -> List[Document]:

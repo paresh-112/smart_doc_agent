@@ -55,16 +55,21 @@ if 'db' not in st.session_state:
         logger.info("Clearing previous sessions (fresh start)")
         st.session_state.db.clear_all_sessions()
 
-        # Clear ChromaDB on fresh start
-        chroma_dir = config.chroma_db_path
-        if os.path.exists(chroma_dir):
-            try:
-                logger.info(f"Clearing ChromaDB directory: {chroma_dir}")
-                shutil.rmtree(chroma_dir)
-                os.makedirs(chroma_dir, exist_ok=True)
-                logger.info("✅ ChromaDB cleared")
-            except Exception as e:
-                logger.error(f"Failed to clear ChromaDB: {str(e)}")
+        # Clear ChromaDB on fresh start (only for local, not Streamlit Cloud)
+        is_streamlit_cloud = os.getenv('STREAMLIT_SHARING_MODE') or os.path.exists('/mount/src')
+
+        if not is_streamlit_cloud and config.chroma_db_path:
+            chroma_dir = config.chroma_db_path
+            if os.path.exists(chroma_dir):
+                try:
+                    logger.info(f"Clearing ChromaDB directory: {chroma_dir}")
+                    shutil.rmtree(chroma_dir)
+                    os.makedirs(chroma_dir, exist_ok=True)
+                    logger.info("✅ ChromaDB cleared")
+                except Exception as e:
+                    logger.error(f"Failed to clear ChromaDB: {str(e)}")
+        else:
+            logger.info("Using in-memory ChromaDB storage")
 
         # Create new session in database
         st.session_state.db.create_session(st.session_state.session_id)
@@ -530,14 +535,15 @@ def main():
                 if st.session_state.vectorstore:
                     st.session_state.vectorstore.clear_vectorstore()
 
-                # Clear all ChromaDB collections by deleting the chroma_db directory
-                chroma_dir = "./chroma_db"
-                if os.path.exists(chroma_dir):
-                    try:
-                        shutil.rmtree(chroma_dir)
-                        os.makedirs(chroma_dir, exist_ok=True)
-                    except Exception as e:
-                        st.warning(f"⚠️ Could not clear vector database: {e}")
+                # Clear all ChromaDB collections (only if using persistent storage)
+                if config.chroma_db_path:
+                    chroma_dir = config.chroma_db_path
+                    if os.path.exists(chroma_dir):
+                        try:
+                            shutil.rmtree(chroma_dir)
+                            os.makedirs(chroma_dir, exist_ok=True)
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not clear vector database: {e}")
 
                 # Clear all sessions from database
                 if st.session_state.db.clear_all_sessions():

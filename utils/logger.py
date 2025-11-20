@@ -25,8 +25,11 @@ class AppLogger:
 
     def _setup_logging(self):
         """Configure logging with file and console handlers."""
+        # Detect Streamlit Cloud environment
+        is_streamlit_cloud = os.getenv('STREAMLIT_SHARING_MODE') or os.path.exists('/mount/src')
+
         # Create logs directory if it doesn't exist
-        log_dir = "./logs"
+        log_dir = "/tmp/logs" if is_streamlit_cloud else "./logs"
         os.makedirs(log_dir, exist_ok=True)
 
         # Create log filename with date

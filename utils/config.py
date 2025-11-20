@@ -42,6 +42,12 @@ class Config:
         """Initialize configuration."""
         logger.info("Initializing configuration...")
         load_dotenv()
+
+        # Detect Streamlit Cloud environment
+        self.is_streamlit_cloud = os.getenv('STREAMLIT_SHARING_MODE') or os.path.exists('/mount/src')
+        if self.is_streamlit_cloud:
+            logger.info("🌥️  Streamlit Cloud detected - using temporary storage")
+
         self._validate_and_setup()
 
     def _validate_and_setup(self):
@@ -66,13 +72,24 @@ class Config:
         """Create required directories if they don't exist."""
         logger.info("Checking required directories...")
 
-        for dir_path in self.REQUIRED_DIRS:
-            path = Path(dir_path)
-            if not path.exists():
-                logger.info(f"  Creating directory: {dir_path}")
-                path.mkdir(parents=True, exist_ok=True)
-            else:
-                logger.debug(f"  Directory exists: {dir_path}")
+        if self.is_streamlit_cloud:
+            # On Streamlit Cloud, use /tmp/ for writable storage
+            logger.info("Using /tmp/ directory for Streamlit Cloud")
+            tmp_dirs = ['/tmp/data', '/tmp/logs']
+            for dir_path in tmp_dirs:
+                path = Path(dir_path)
+                if not path.exists():
+                    logger.info(f"  Creating temp directory: {dir_path}")
+                    path.mkdir(parents=True, exist_ok=True)
+        else:
+            # Local deployment - create normal directories
+            for dir_path in self.REQUIRED_DIRS:
+                path = Path(dir_path)
+                if not path.exists():
+                    logger.info(f"  Creating directory: {dir_path}")
+                    path.mkdir(parents=True, exist_ok=True)
+                else:
+                    logger.debug(f"  Directory exists: {dir_path}")
 
         logger.info("✅ All required directories ready")
 
@@ -107,16 +124,23 @@ class Config:
         self.chunk_size = int(os.getenv('CHUNK_SIZE', self.OPTIONAL_ENV_VARS['CHUNK_SIZE']))
         self.chunk_overlap = int(os.getenv('CHUNK_OVERLAP', self.OPTIONAL_ENV_VARS['CHUNK_OVERLAP']))
         self.max_search_results = int(os.getenv('MAX_SEARCH_RESULTS', self.OPTIONAL_ENV_VARS['MAX_SEARCH_RESULTS']))
-        self.database_path = os.getenv('DATABASE_PATH', self.OPTIONAL_ENV_VARS['DATABASE_PATH'])
-        self.chroma_db_path = os.getenv('CHROMA_DB_PATH', self.OPTIONAL_ENV_VARS['CHROMA_DB_PATH'])
+
+        # Use /tmp/ paths for Streamlit Cloud (writable), normal paths for local
+        if self.is_streamlit_cloud:
+            self.database_path = '/tmp/data/sessions.db'
+            self.chroma_db_path = None  # In-memory for ChromaDB
+        else:
+            self.database_path = os.getenv('DATABASE_PATH', self.OPTIONAL_ENV_VARS['DATABASE_PATH'])
+            self.chroma_db_path = os.getenv('CHROMA_DB_PATH', self.OPTIONAL_ENV_VARS['CHROMA_DB_PATH'])
 
         logger.info("Configuration loaded:")
+        logger.info(f"  Deployment: {'Streamlit Cloud' if self.is_streamlit_cloud else 'Local'}")
         logger.info(f"  Chunk size: {self.chunk_size}")
         logger.info(f"  Chunk overlap: {self.chunk_overlap}")
         logger.info(f"  Max search results: {self.max_search_results}")
         logger.info(f"  Max file size: {self.max_file_size_mb}MB")
         logger.info(f"  Database path: {self.database_path}")
-        logger.info(f"  ChromaDB path: {self.chroma_db_path}")
+        logger.info(f"  ChromaDB path: {self.chroma_db_path if self.chroma_db_path else 'In-memory'}")
 
     def get_config_summary(self) -> Dict[str, str]:
         """Get configuration summary for display.
